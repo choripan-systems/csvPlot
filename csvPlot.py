@@ -1,12 +1,12 @@
 import sys
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Slider
+from matplotlib.patches import Rectangle
 import argparse
 
 def plot_csv_data(csv_file):
     """
-    Read CSV file and create an interactive plot with zoom slider.
+    Read CSV file and create an interactive plot with click-drag zoom.
     
     Args:
         csv_file: Path to the CSV file
@@ -29,7 +29,7 @@ def plot_csv_data(csv_file):
         
         # Create the figure and axis
         fig, ax = plt.subplots(figsize=(10, 6))
-        plt.subplots_adjust(bottom=0.25)
+        plt.subplots_adjust(bottom=0.15)
         
         # Store original data limits
         x_min, x_max = x_data.min(), x_data.max()
@@ -49,43 +49,111 @@ def plot_csv_data(csv_file):
         # Set labels and title
         ax.set_xlabel(x_label)
         ax.set_ylabel('Values')
-        ax.set_title(f'Data from {csv_file}')
+        ax.set_title(f'Data from {csv_file}\n(Click and drag to zoom, Right-click to reset)')
         ax.legend()
         ax.grid(True, alpha=0.3)
         
         # Set initial limits with some padding
-        ax.set_xlim(x_min - 0.05 * x_range, x_max + 0.05 * x_range)
-        ax.set_ylim(y_min - 0.05 * y_range, y_max + 0.05 * y_range)
+        initial_xlim = (x_min - 0.05 * x_range, x_max + 0.05 * x_range)
+        initial_ylim = (y_min - 0.05 * y_range, y_max + 0.05 * y_range)
+        ax.set_xlim(initial_xlim)
+        ax.set_ylim(initial_ylim)
         
-        # Create slider for zoom control
-        ax_slider = plt.axes([0.2, 0.1, 0.6, 0.03])
-        zoom_slider = Slider(
-            ax_slider, 
-            'Zoom', 
-            0.1,  # Min zoom (10% of data)
-            1.0,  # Max zoom (100% of data - full view)
-            valinit=1.0,
-            valstep=0.05
-        )
+        # Variables for selection rectangle
+        selection_rect = None
+        start_x = None
+        is_dragging = False
         
-        # Store the center point for zooming
-        center_x = (x_min + x_max) / 2
-        center_y = (y_min + y_max) / 2
-        
-        def update(val):
-            """Update plot based on slider value"""
-            zoom = zoom_slider.val
+        def on_press(event):
+            """Handle mouse button press"""
+            nonlocal start_x, is_dragging, selection_rect
             
-            # Calculate new X range based on zoom level
-            new_x_range = x_range * zoom
+            if event.inaxes != ax:
+                return
             
-            # Set new X limits centered on the data, keep Y limits unchanged
-            ax.set_xlim(center_x - new_x_range / 2, center_x + new_x_range / 2)
+            # Right click resets the view
+            if event.button == 3:
+                ax.set_xlim(initial_xlim)
+                ax.set_ylim(initial_ylim)
+                fig.canvas.draw()
+                return
             
-            fig.canvas.draw_idle()
+            # Left click starts selection
+            if event.button == 1:
+                start_x = event.xdata
+                is_dragging = True
+                
+                # Remove old selection rectangle if it exists
+                if selection_rect is not None:
+                    selection_rect.remove()
+                    selection_rect = None
+                
+        def on_motion(event):
+            """Handle mouse motion"""
+            nonlocal selection_rect
+            
+            if not is_dragging or event.inaxes != ax or start_x is None:
+                return
+            
+            # Remove old rectangle
+            if selection_rect is not None:
+                selection_rect.remove()
+            
+            # Draw new selection rectangle
+            current_x = event.xdata
+            ylim = ax.get_ylim()
+            
+            rect_x = min(start_x, current_x)
+            rect_width = abs(current_x - start_x)
+            rect_y = ylim[0]
+            rect_height = ylim[1] - ylim[0]
+            
+            selection_rect = Rectangle(
+                (rect_x, rect_y), 
+                rect_width, 
+                rect_height,
+                fill=True,
+                facecolor='blue',
+                alpha=0.2,
+                edgecolor='blue',
+                linewidth=2
+            )
+            ax.add_patch(selection_rect)
+            fig.canvas.draw()
         
-        # Connect slider to update function
-        zoom_slider.on_changed(update)
+        def on_release(event):
+            """Handle mouse button release"""
+            nonlocal is_dragging, selection_rect, start_x
+            
+            if not is_dragging or event.inaxes != ax or start_x is None:
+                is_dragging = False
+                return
+            
+            is_dragging = False
+            end_x = event.xdata
+            
+            if end_x is None:
+                return
+            
+            # Remove selection rectangle
+            if selection_rect is not None:
+                selection_rect.remove()
+                selection_rect = None
+            
+            # Zoom to selected region
+            new_xlim = (min(start_x, end_x), max(start_x, end_x))
+            
+            # Only zoom if selection is meaningful (not just a click)
+            if abs(end_x - start_x) > 0.01 * x_range:
+                ax.set_xlim(new_xlim)
+                fig.canvas.draw()
+            
+            start_x = None
+        
+        # Connect event handlers
+        fig.canvas.mpl_connect('button_press_event', on_press)
+        fig.canvas.mpl_connect('motion_notify_event', on_motion)
+        fig.canvas.mpl_connect('button_release_event', on_release)
         
         plt.show()
         
@@ -102,7 +170,7 @@ def plot_csv_data(csv_file):
 def main():
     """Main function to parse arguments and run the plotter"""
     parser = argparse.ArgumentParser(
-        description='Plot data from a CSV file with interactive zoom control'
+        description='Plot data from a CSV file with interactive click-drag zoom'
     )
     parser.add_argument(
         'csv_file',
