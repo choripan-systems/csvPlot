@@ -76,13 +76,11 @@ def plot_csv_data(csv_file):
             """Update plot based on slider value"""
             zoom = zoom_slider.val
             
-            # Calculate new ranges based on zoom level
+            # Calculate new X range based on zoom level
             new_x_range = x_range * zoom
-            new_y_range = y_range * zoom
             
-            # Set new limits centered on the data
+            # Set new X limits centered on the data, keep Y limits unchanged
             ax.set_xlim(center_x - new_x_range / 2, center_x + new_x_range / 2)
-            ax.set_ylim(center_y - new_y_range / 2, center_y + new_y_range / 2)
             
             fig.canvas.draw_idle()
         
