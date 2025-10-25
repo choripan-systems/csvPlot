@@ -150,10 +150,45 @@ def plot_csv_data(csv_file):
             
             start_x = None
         
+        # Add annotation for hover display
+        annot = ax.annotate("", xy=(0,0), xytext=(10,10), textcoords="offset points",
+                           bbox=dict(boxstyle="round", fc="yellow", alpha=0.9),
+                           arrowprops=dict(arrowstyle="->"))
+        annot.set_visible(False)
+        
+        def on_hover(event):
+            """Handle mouse hover to show data point values"""
+            if event.inaxes != ax or is_dragging:
+                annot.set_visible(False)
+                fig.canvas.draw_idle()
+                return
+            
+            # Check each line to see if cursor is near a data point
+            for line, col_name in zip(lines, y_columns):
+                contains, ind = line.contains(event)
+                if contains:
+                    # Get the index of the point
+                    index = ind["ind"][0]
+                    x_val = x_data.iloc[index]
+                    y_val = df[col_name].iloc[index]
+                    
+                    # Update annotation
+                    annot.xy = (x_val, y_val)
+                    text = f"{col_name}\n{x_label}: {x_val:.4g}\nY: {y_val:.4g}"
+                    annot.set_text(text)
+                    annot.set_visible(True)
+                    fig.canvas.draw_idle()
+                    return
+            
+            # No point found, hide annotation
+            annot.set_visible(False)
+            fig.canvas.draw_idle()
+        
         # Connect event handlers
         fig.canvas.mpl_connect('button_press_event', on_press)
         fig.canvas.mpl_connect('motion_notify_event', on_motion)
         fig.canvas.mpl_connect('button_release_event', on_release)
+        fig.canvas.mpl_connect('motion_notify_event', on_hover)
         
         plt.show()
         
